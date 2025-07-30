@@ -1,0 +1,205 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Provider {
+  // Properties
+  id                  String             @id @default(uuid())
+  firstName           String             @db.VarChar(50)
+  lastName            String             @db.VarChar(50)
+  email               String             @unique
+  phoneNumber         String             @unique
+  passwordHash        String
+  specialization      String             @db.VarChar(100)
+  licenseNumber       String             @unique
+  yearsOfExperience   Int
+  clinicStreet        String
+  clinicCity          String
+  clinicState         String
+  clinicZip           String
+  verificationStatus  VerificationStatus @default(pending)
+  licenseDocumentUrl  String?
+  isActive            Boolean            @default(true)
+  failedLoginAttempts Int                @default(0)
+  lockedUntil         DateTime?
+  lastLogin           DateTime?
+  loginCount          Int                @default(0)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // One-to-many relations
+  refreshTokens  RefreshToken[]
+  availabilities ProviderAvailability[]
+}
+
+model Patient {
+  // Properties
+  id                String   @id @default(uuid())
+  firstName         String   @db.VarChar(50)
+  lastName          String   @db.VarChar(50)
+  email             String   @unique
+  phoneNumber       String   @unique
+  passwordHash      String
+  dateOfBirth       DateTime
+  gender            Gender
+  clinicStreet      String
+  clinicCity        String
+  clinicState       String
+  clinicZip         String
+  emergencyName     String?
+  emergencyPhone    String?
+  emergencyRelation String?
+  medicalHistory    String[] // simple text array
+  insuranceProvider String?
+  insurancePolicy   String? // encrypted
+  emailVerified     Boolean  @default(false)
+  phoneVerified     Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  marketingOptIn    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // One-to-many relations
+  verificationTokens VerificationToken[]
+}
+
+model RefreshToken {
+  // Properties
+  id         String    @id @default(uuid())
+  tokenHash  String
+  providerId String
+  expiresAt  DateTime
+  isRevoked  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  // One-to-one relations
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  // Properties
+  id        String    @id @default(uuid())
+  token     String // hashed
+  type      TokenType
+  patientId String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  // One-to-one relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+model ProviderAvailability {
+  // Properties
+  id                     String             @id @default(uuid())
+  providerId             String
+  date                   DateTime
+  startTime              String
+  endTime                String
+  timezone               String
+  isRecurring            Boolean            @default(false)
+  recurrencePattern      RecurrencePattern?
+  recurrenceEndDate      DateTime?
+  slotDuration           Int                @default(30)
+  breakDuration          Int                @default(0)
+  status                 AvailabilityStatus @default(available)
+  maxAppointmentsPerSlot Int                @default(1)
+  currentAppointments    Int                @default(0)
+  appointmentType        AppointmentType    @default(consultation)
+  location               Json
+  pricing                Json?
+  specialRequirements    String[]
+  notes                  String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  // One-to-one relations
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // One-to-many relations
+  appointmentSlots AppointmentSlot[]
+
+  // Indexes
+  @@index([providerId, date])
+  @@index([date, status])
+}
+
+model AppointmentSlot {
+  // Properties
+  id               String     @id @default(uuid())
+  availabilityId   String
+  providerId       String
+  slotStartTime    DateTime
+  slotEndTime      DateTime
+  status           SlotStatus @default(available)
+  patientId        String?
+  appointmentType  String
+  bookingReference String?    @unique
+  createdAt        DateTime   @default(now())
+
+  // One-to-one relations
+  availability ProviderAvailability @relation(fields: [availabilityId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([providerId, slotStartTime])
+  @@index([status, slotStartTime])
+}
+
+enum VerificationStatus {
+  pending
+  verified
+  rejected
+}
+
+enum Gender {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum TokenType {
+  email
+  phone
+}
+
+enum RecurrencePattern {
+  daily
+  weekly
+  monthly
+}
+
+enum AvailabilityStatus {
+  available
+  booked
+  cancelled
+  blocked
+  maintenance
+}
+
+enum SlotStatus {
+  available
+  booked
+  cancelled
+  blocked
+}
+
+enum AppointmentType {
+  consultation
+  follow_up
+  emergency
+  telemedicine
+}
