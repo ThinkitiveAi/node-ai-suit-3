@@ -27,7 +27,7 @@ describe('ProviderService', () => {
     email: 'john.doe@clinic.com',
     phone_number: '+1234567890',
     password: 'SecurePassword123!',
-    password_confirm: 'SecurePassword123!',
+    confirm_password: 'SecurePassword123!',
     specialization: 'Cardiology',
     license_number: 'MD123456789',
     years_of_experience: 10,
@@ -91,7 +91,7 @@ describe('ProviderService', () => {
     it('should throw BadRequestException when passwords do not match', async () => {
       const invalidDto = {
         ...validCreateProviderDto,
-        password_confirm: 'DifferentPassword123!',
+        confirm_password: 'DifferentPassword123!',
       };
 
       await expect(service.registerProvider(invalidDto)).rejects.toThrow(

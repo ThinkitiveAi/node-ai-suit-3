@@ -27,5 +27,11 @@ export class LoginDto {
   })
   @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+    return value;
+  })
   remember_me?: boolean = false;
 } 

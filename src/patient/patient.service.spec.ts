@@ -41,7 +41,7 @@ describe('PatientService', () => {
     email: 'john.doe@example.com',
     phone_number: '+1234567890',
     password: 'SecurePass123!',
-    password_confirm: 'SecurePass123!',
+    confirm_password: 'SecurePass123!',
     date_of_birth: '1990-01-01',
     gender: 'male' as any,
     address: {
@@ -123,7 +123,7 @@ describe('PatientService', () => {
     it('should throw BadRequestException when passwords do not match', async () => {
       const dtoWithMismatchedPasswords = {
         ...validCreatePatientDto,
-        password_confirm: 'DifferentPassword123!',
+        confirm_password: 'DifferentPassword123!',
       };
 
       await expect(service.registerPatient(dtoWithMismatchedPasswords, '127.0.0.1'))

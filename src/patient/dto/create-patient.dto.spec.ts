@@ -10,7 +10,7 @@ describe('CreatePatientDto', () => {
     email: 'john.doe@example.com',
     phone_number: '+1234567890',
     password: 'SecurePass123!',
-    password_confirm: 'SecurePass123!',
+    confirm_password: 'SecurePass123!',
     date_of_birth: '1990-01-01',
     gender: 'male',
     address: {
@@ -46,7 +46,7 @@ describe('CreatePatientDto', () => {
   });
 
   it('should fail with invalid phone number', async () => {
-    const invalidDto = { ...validDto, phone_number: '1234567890' };
+    const invalidDto = { ...validDto, phone_number: 'invalid-phone' };
     const dto = plainToClass(CreatePatientDto, invalidDto);
     const errors = await validate(dto);
     expect(errors.length).toBeGreaterThan(0);
