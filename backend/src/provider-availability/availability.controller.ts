@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -14,24 +13,25 @@ import {
   ValidationPipe,
   UsePipes,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AvailabilityService } from './availability.service';
-import { CreateAvailabilityDto } from './dto/create-availability.dto';
-import { UpdateAvailabilityDto } from './dto/update-availability.dto';
-import { SlotSearchDto } from './dto/slot-search.dto';
+import { CreateDayAvailabilityDto } from './dto/create-day-availability.dto';
+import { UpdateDayAvailabilityDto } from './dto/update-day-availability.dto';
+import { CreateBlockedSlotDto } from './dto/create-blocked-slot.dto';
+import { UpdateBlockedSlotDto } from './dto/update-blocked-slot.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
-@ApiTags('Provider Availability')
+@ApiTags('Provider Day-wise Availability')
 @Controller('v1/provider')
 @UseGuards(JwtAuthGuard)
 export class AvailabilityController {
   constructor(private readonly availabilityService: AvailabilityService) {}
 
   /**
-   * Create availability slots for a provider
+   * Create day-wise availability for the current provider
    */
-  @Post('availability')
+  @Post('day-availability')
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({
     transform: true,
@@ -41,29 +41,30 @@ export class AvailabilityController {
   }))
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Create availability slots',
-    description: 'Create availability slots for a healthcare provider with optional recurring patterns'
+    summary: 'Create day-wise availability',
+    description: 'Create or update day-wise availability settings for the current provider'
   })
-  @ApiBody({ type: CreateAvailabilityDto })
+  @ApiBody({ type: CreateDayAvailabilityDto })
   @ApiResponse({ 
     status: 201, 
-    description: 'Availability slots created successfully',
+    description: 'Day-wise availability created successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Availability slots created successfully' },
+        message: { type: 'string', example: 'Day-wise availability created successfully' },
         data: {
-          type: 'object',
-          properties: {
-            availability_id: { type: 'string', example: 'uuid-here' },
-            slots_created: { type: 'number', example: 16 },
-            date_range: {
-              type: 'object',
-              properties: {
-                start: { type: 'string', example: '2024-08-01' },
-                end: { type: 'string', example: '2024-09-01' }
-              }
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'uuid-here' },
+              providerId: { type: 'string', example: 'provider-uuid' },
+              dayOfWeek: { type: 'string', example: 'monday' },
+              startTime: { type: 'string', example: '09:00 AM' },
+              endTime: { type: 'string', example: '06:00 PM' },
+              timezone: { type: 'string', example: 'America/New_York' },
+              isActive: { type: 'boolean', example: true },
             }
           }
         }
@@ -75,71 +76,52 @@ export class AvailabilityController {
     description: 'Bad request - validation errors' 
   })
   @ApiResponse({ 
-    status: 409, 
-    description: 'Conflict - overlapping slots detected' 
+    status: 404, 
+    description: 'Provider not found' 
   })
-  @ApiResponse({ 
-    status: 422, 
-    description: 'Unprocessable entity - validation errors' 
-  })
-  async createAvailability(
-    @Body() createAvailabilityDto: CreateAvailabilityDto,
+  async createDayAvailability(
+    @Body() createDayAvailabilityDto: CreateDayAvailabilityDto,
     @Req() req: Request,
   ) {
     const providerId = (req.user as any).id;
     
-    const result = await this.availabilityService.createAvailability(
+    const result = await this.availabilityService.createDayAvailability(
       providerId,
-      createAvailabilityDto,
+      createDayAvailabilityDto,
     );
 
-    return {
-      success: true,
-      message: 'Availability slots created successfully',
-      data: result,
-    };
+    return result;
   }
 
   /**
-   * Get provider availability
+   * Get day-wise availability for the current provider
    */
-  @Get(':provider_id/availability')
+  @Get('day-availability')
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Get provider availability',
-    description: 'Retrieve availability information for a specific provider'
+    summary: 'Get day-wise availability',
+    description: 'Get day-wise availability settings for the current provider'
   })
-  @ApiParam({ name: 'provider_id', description: 'Provider ID', example: 'uuid-here' })
-  @ApiQuery({ name: 'start_date', required: false, description: 'Start date (YYYY-MM-DD)', example: '2024-08-01' })
-  @ApiQuery({ name: 'end_date', required: false, description: 'End date (YYYY-MM-DD)', example: '2024-09-01' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Provider availability retrieved successfully',
+    description: 'Day-wise availability retrieved successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Provider availability retrieved successfully' },
+        message: { type: 'string', example: 'Day-wise availability retrieved successfully' },
         data: {
-          type: 'object',
-          properties: {
-            provider_id: { type: 'string', example: 'uuid-here' },
-            availabilities: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string', example: 'uuid-here' },
-                  date: { type: 'string', example: '2024-08-01T00:00:00.000Z' },
-                  start_time: { type: 'string', example: '09:00' },
-                  end_time: { type: 'string', example: '17:00' },
-                  timezone: { type: 'string', example: 'Asia/Kolkata' },
-                  status: { type: 'string', example: 'available' },
-                  appointment_type: { type: 'string', example: 'consultation' },
-                  available_slots: { type: 'number', example: 16 },
-                  total_slots: { type: 'number', example: 16 }
-                }
-              }
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'uuid-here' },
+              providerId: { type: 'string', example: 'provider-uuid' },
+              dayOfWeek: { type: 'string', example: 'monday' },
+              startTime: { type: 'string', example: '09:00 AM' },
+              endTime: { type: 'string', example: '06:00 PM' },
+              isActive: { type: 'boolean', example: true },
             }
           }
         }
@@ -150,31 +132,18 @@ export class AvailabilityController {
     status: 404, 
     description: 'Provider not found' 
   })
-  async getProviderAvailability(
-    @Param('provider_id') providerId: string,
-    @Query('start_date') startDate?: string,
-    @Query('end_date') endDate?: string,
-  ) {
-    const availabilities = await this.availabilityService.getProviderAvailability(
-      providerId,
-      startDate,
-      endDate,
-    );
+  async getDayAvailability(@Req() req: Request) {
+    const providerId = (req.user as any).id;
+    
+    const result = await this.availabilityService.getDayAvailability(providerId);
 
-    return {
-      success: true,
-      message: 'Provider availability retrieved successfully',
-      data: {
-        provider_id: providerId,
-        availabilities,
-      },
-    };
+    return result;
   }
 
   /**
-   * Update availability slot
+   * Update day-wise availability for a specific day
    */
-  @Put('availability/:slot_id')
+  @Put('day-availability/:day_of_week')
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({
     transform: true,
@@ -184,245 +153,195 @@ export class AvailabilityController {
   }))
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Update availability slot',
-    description: 'Update a specific availability slot for the authenticated provider'
+    summary: 'Update day-wise availability',
+    description: 'Update day-wise availability for a specific day'
   })
-  @ApiParam({ name: 'slot_id', description: 'Slot ID', example: 'uuid-here' })
-  @ApiBody({ type: UpdateAvailabilityDto })
+  @ApiParam({
+    name: 'day_of_week',
+    description: 'Day of the week (monday, tuesday, etc.)',
+    example: 'monday',
+  })
+  @ApiBody({ type: UpdateDayAvailabilityDto })
   @ApiResponse({ 
     status: 200, 
-    description: 'Availability slot updated successfully',
+    description: 'Day availability updated successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Availability slot updated successfully' },
+        message: { type: 'string', example: 'Day availability updated successfully' },
         data: {
           type: 'object',
           properties: {
             id: { type: 'string', example: 'uuid-here' },
-            status: { type: 'string', example: 'blocked' },
-            appointment_type: { type: 'string', example: 'consultation' },
-            slot_start_time: { type: 'string', example: '2024-08-01T09:00:00.000Z' },
-            slot_end_time: { type: 'string', example: '2024-08-01T09:30:00.000Z' }
+            providerId: { type: 'string', example: 'provider-uuid' },
+            dayOfWeek: { type: 'string', example: 'monday' },
+            startTime: { type: 'string', example: '09:00 AM' },
+            endTime: { type: 'string', example: '06:00 PM' },
+            isActive: { type: 'boolean', example: true },
           }
         }
       }
     }
   })
   @ApiResponse({ 
-    status: 404, 
-    description: 'Slot not found' 
+    status: 400, 
+    description: 'Bad request - validation errors' 
   })
   @ApiResponse({ 
-    status: 409, 
-    description: 'Cannot update booked slot' 
+    status: 404, 
+    description: 'Provider or day availability not found' 
   })
-  async updateAvailabilitySlot(
-    @Param('slot_id') slotId: string,
-    @Body() updateAvailabilityDto: UpdateAvailabilityDto,
+  async updateDayAvailability(
+    @Param('day_of_week') dayOfWeek: string,
+    @Body() updateDayAvailabilityDto: UpdateDayAvailabilityDto,
     @Req() req: Request,
   ) {
     const providerId = (req.user as any).id;
     
-    const result = await this.availabilityService.updateAvailabilitySlot(
-      slotId,
+    const result = await this.availabilityService.updateDayAvailability(
       providerId,
-      updateAvailabilityDto,
+      dayOfWeek,
+      updateDayAvailabilityDto,
     );
 
-    return {
-      success: true,
-      message: 'Availability slot updated successfully',
-      data: result,
-    };
+    return result;
   }
 
   /**
-   * Delete availability slot
+   * Delete day-wise availability for a specific day
    */
-  @Delete('availability/:slot_id')
+  @Delete('day-availability/:day_of_week')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Delete availability slot',
-    description: 'Delete a specific availability slot or recurring series'
+    summary: 'Delete day-wise availability',
+    description: 'Delete day-wise availability for a specific day'
   })
-  @ApiParam({ name: 'slot_id', description: 'Slot ID', example: 'uuid-here' })
-  @ApiQuery({ name: 'delete_recurring', required: false, description: 'Delete recurring series', example: 'true' })
-  @ApiQuery({ name: 'reason', required: false, description: 'Reason for deletion', example: 'emergency_leave' })
+  @ApiParam({
+    name: 'day_of_week',
+    description: 'Day of the week (monday, tuesday, etc.)',
+    example: 'monday',
+  })
   @ApiResponse({ 
     status: 200, 
-    description: 'Availability slot deleted successfully',
+    description: 'Day availability deleted successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Availability slot deleted successfully' },
-        data: {
-          type: 'object',
-          properties: {
-            message: { type: 'string', example: 'Slot deleted successfully' },
-            reason: { type: 'string', example: 'emergency_leave' }
-          }
-        }
+        message: { type: 'string', example: 'Day availability deleted successfully' },
       }
     }
   })
   @ApiResponse({ 
     status: 404, 
-    description: 'Slot not found' 
+    description: 'Provider or day availability not found' 
   })
-  @ApiResponse({ 
-    status: 409, 
-    description: 'Cannot delete booked slot' 
-  })
-  async deleteAvailabilitySlot(
-    @Param('slot_id') slotId: string,
+  async deleteDayAvailability(
+    @Param('day_of_week') dayOfWeek: string,
     @Req() req: Request,
-    @Query('delete_recurring') deleteRecurring?: string,
-    @Query('reason') reason?: string,
   ) {
     const providerId = (req.user as any).id;
-    const shouldDeleteRecurring = deleteRecurring === 'true';
     
-    const result = await this.availabilityService.deleteAvailabilitySlot(
-      slotId,
+    const result = await this.availabilityService.deleteDayAvailability(
       providerId,
-      shouldDeleteRecurring,
-      reason,
+      dayOfWeek,
     );
 
-    return {
-      success: true,
-      message: 'Availability slot deleted successfully',
-      data: result,
-    };
+    return result;
   }
 
   /**
-   * Search available slots for patients
+   * Create blocked slot for the current provider
    */
-  @Get('availability/search')
-  @HttpCode(HttpStatus.OK)
+  @Post('blocked-slots')
+  @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({
     transform: true,
     whitelist: true,
     forbidNonWhitelisted: true,
     errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
   }))
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Search available slots',
-    description: 'Search for available appointment slots with various filters'
+    summary: 'Create blocked slot',
+    description: 'Create a blocked slot for the current provider'
   })
-  @ApiQuery({ name: 'date', required: false, description: 'Specific date (YYYY-MM-DD)', example: '2024-08-01' })
-  @ApiQuery({ name: 'start_date', required: false, description: 'Start date range', example: '2024-08-01' })
-  @ApiQuery({ name: 'end_date', required: false, description: 'End date range', example: '2024-09-01' })
-  @ApiQuery({ name: 'specialization', required: false, description: 'Provider specialization', example: 'cardiology' })
-  @ApiQuery({ name: 'location', required: false, description: 'Location filter', example: 'Pune' })
-  @ApiQuery({ name: 'appointment_type', required: false, description: 'Type of appointment', example: 'consultation' })
+  @ApiBody({ type: CreateBlockedSlotDto })
   @ApiResponse({ 
-    status: 200, 
-    description: 'Available slots retrieved successfully',
+    status: 201, 
+    description: 'Blocked slot created successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Available slots retrieved successfully' },
+        message: { type: 'string', example: 'Blocked slot created successfully' },
         data: {
           type: 'object',
           properties: {
-            slots: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string', example: 'uuid-here' },
-                  provider: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'string', example: 'uuid-here' },
-                      name: { type: 'string', example: 'Dr. John Doe' },
-                      specialization: { type: 'string', example: 'Cardiology' },
-                      location: { type: 'string', example: 'Pune, Maharashtra' }
-                    }
-                  },
-                  slot_start_time: { type: 'string', example: '2024-08-01T09:00:00.000Z' },
-                  slot_end_time: { type: 'string', example: '2024-08-01T09:30:00.000Z' },
-                  appointment_type: { type: 'string', example: 'consultation' },
-                  location: { type: 'object', example: { type: 'clinic', address: 'Main Street' } },
-                  pricing: { type: 'object', example: { base_fee: 500, currency: 'INR' } },
-                  timezone: { type: 'string', example: 'Asia/Kolkata' }
-                }
-              }
-            },
-            total_count: { type: 'number', example: 1 },
-            filters_applied: {
-              type: 'object',
-              properties: {
-                date: { type: 'string', example: '2024-08-01' },
-                specialization: { type: 'string', example: 'cardiology' },
-                location: { type: 'string', example: 'Pune' }
-              }
-            }
+            id: { type: 'string', example: 'uuid-here' },
+            providerId: { type: 'string', example: 'provider-uuid' },
+            blockDate: { type: 'string', example: '2024-08-15T00:00:00.000Z' },
+            startTime: { type: 'string', example: '09:00' },
+            endTime: { type: 'string', example: '17:00' },
+            reason: { type: 'string', example: 'Holiday' },
           }
         }
       }
     }
   })
-  async searchAvailableSlots(@Query() searchDto: SlotSearchDto) {
-    const slots = await this.availabilityService.searchAvailableSlots(searchDto);
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad request - validation errors' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Provider not found' 
+  })
+  async createBlockedSlot(
+    @Body() createBlockedSlotDto: CreateBlockedSlotDto,
+    @Req() req: Request,
+  ) {
+    const providerId = (req.user as any).id;
+    
+    const result = await this.availabilityService.createBlockedSlot(
+      providerId,
+      createBlockedSlotDto,
+    );
 
-    return {
-      success: true,
-      message: 'Available slots retrieved successfully',
-      data: {
-        slots,
-        total_count: slots.length,
-        filters_applied: {
-          date: searchDto.date,
-          start_date: searchDto.start_date,
-          end_date: searchDto.end_date,
-          specialization: searchDto.specialization,
-          location: searchDto.location,
-          appointment_type: searchDto.appointment_type,
-        },
-      },
-    };
+    return result;
   }
 
   /**
-   * Get availability statistics for a provider
+   * Get blocked slots for the current provider
    */
-  @Get(':provider_id/availability/stats')
+  @Get('blocked-slots')
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Get availability statistics',
-    description: 'Get availability statistics for a specific provider'
+    summary: 'Get blocked slots',
+    description: 'Get blocked slots for the current provider'
   })
-  @ApiParam({ name: 'provider_id', description: 'Provider ID', example: 'uuid-here' })
-  @ApiQuery({ name: 'start_date', required: false, description: 'Start date for statistics', example: '2024-08-01' })
-  @ApiQuery({ name: 'end_date', required: false, description: 'End date for statistics', example: '2024-09-01' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Availability statistics retrieved successfully',
+    description: 'Blocked slots retrieved successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Availability statistics retrieved successfully' },
+        message: { type: 'string', example: 'Blocked slots retrieved successfully' },
         data: {
-          type: 'object',
-          properties: {
-            provider_id: { type: 'string', example: 'uuid-here' },
-            statistics: {
-              type: 'object',
-              properties: {
-                total_slots: { type: 'number', example: 160 },
-                booked_slots: { type: 'number', example: 45 },
-                available_slots: { type: 'number', example: 115 },
-                booking_rate: { type: 'number', example: 28.125 }
-              }
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'uuid-here' },
+              providerId: { type: 'string', example: 'provider-uuid' },
+              blockDate: { type: 'string', example: '2024-08-15T00:00:00.000Z' },
+              startTime: { type: 'string', example: '09:00' },
+              endTime: { type: 'string', example: '17:00' },
+              reason: { type: 'string', example: 'Holiday' },
             }
           }
         }
@@ -433,150 +352,123 @@ export class AvailabilityController {
     status: 404, 
     description: 'Provider not found' 
   })
-  async getAvailabilityStats(
-    @Param('provider_id') providerId: string,
-    @Query('start_date') startDate?: string,
-    @Query('end_date') endDate?: string,
-  ) {
-    const stats = await this.availabilityService.getAvailabilityStats(
-      providerId,
-      startDate,
-      endDate,
-    );
+  async getBlockedSlots(@Req() req: Request) {
+    const providerId = (req.user as any).id;
+    
+    const result = await this.availabilityService.getBlockedSlots(providerId);
 
-    return {
-      success: true,
-      message: 'Availability statistics retrieved successfully',
-      data: {
-        provider_id: providerId,
-        statistics: stats,
-      },
-    };
+    return result;
   }
 
   /**
-   * Get current provider's availability
+   * Update blocked slot
    */
-  @Get('availability')
+  @Put('blocked-slots/:blocked_slot_id')
   @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+  }))
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Get current provider availability',
-    description: 'Get availability information for the authenticated provider'
+    summary: 'Update blocked slot',
+    description: 'Update a blocked slot for the current provider'
   })
-  @ApiQuery({ name: 'start_date', required: false, description: 'Start date (YYYY-MM-DD)', example: '2024-08-01' })
-  @ApiQuery({ name: 'end_date', required: false, description: 'End date (YYYY-MM-DD)', example: '2024-09-01' })
+  @ApiParam({
+    name: 'blocked_slot_id',
+    description: 'ID of the blocked slot to update',
+    example: 'uuid-here',
+  })
+  @ApiBody({ type: UpdateBlockedSlotDto })
   @ApiResponse({ 
     status: 200, 
-    description: 'Your availability retrieved successfully',
+    description: 'Blocked slot updated successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Your availability retrieved successfully' },
+        message: { type: 'string', example: 'Blocked slot updated successfully' },
         data: {
           type: 'object',
           properties: {
-            availabilities: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string', example: 'uuid-here' },
-                  date: { type: 'string', example: '2024-08-01T00:00:00.000Z' },
-                  start_time: { type: 'string', example: '09:00' },
-                  end_time: { type: 'string', example: '17:00' },
-                  timezone: { type: 'string', example: 'Asia/Kolkata' },
-                  status: { type: 'string', example: 'available' },
-                  appointment_type: { type: 'string', example: 'consultation' },
-                  available_slots: { type: 'number', example: 16 },
-                  total_slots: { type: 'number', example: 16 }
-                }
-              }
-            }
+            id: { type: 'string', example: 'uuid-here' },
+            providerId: { type: 'string', example: 'provider-uuid' },
+            blockDate: { type: 'string', example: '2024-08-15T00:00:00.000Z' },
+            startTime: { type: 'string', example: '09:00' },
+            endTime: { type: 'string', example: '17:00' },
+            reason: { type: 'string', example: 'Holiday' },
           }
         }
       }
     }
   })
-  async getCurrentProviderAvailability(
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad request - validation errors' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Provider or blocked slot not found' 
+  })
+  async updateBlockedSlot(
+    @Param('blocked_slot_id') blockedSlotId: string,
+    @Body() updateBlockedSlotDto: UpdateBlockedSlotDto,
     @Req() req: Request,
-    @Query('start_date') startDate?: string,
-    @Query('end_date') endDate?: string,
   ) {
     const providerId = (req.user as any).id;
     
-    const availabilities = await this.availabilityService.getProviderAvailability(
+    const result = await this.availabilityService.updateBlockedSlot(
       providerId,
-      startDate,
-      endDate,
+      blockedSlotId,
+      updateBlockedSlotDto,
     );
 
-    return {
-      success: true,
-      message: 'Your availability retrieved successfully',
-      data: {
-        availabilities,
-      },
-    };
+    return result;
   }
 
   /**
-   * Get current provider's availability statistics
+   * Delete blocked slot
    */
-  @Get('availability/stats')
+  @Delete('blocked-slots/:blocked_slot_id')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Get current provider statistics',
-    description: 'Get availability statistics for the authenticated provider'
+    summary: 'Delete blocked slot',
+    description: 'Delete a blocked slot for the current provider'
   })
-  @ApiQuery({ name: 'start_date', required: false, description: 'Start date for statistics', example: '2024-08-01' })
-  @ApiQuery({ name: 'end_date', required: false, description: 'End date for statistics', example: '2024-09-01' })
+  @ApiParam({
+    name: 'blocked_slot_id',
+    description: 'ID of the blocked slot to delete',
+    example: 'uuid-here',
+  })
   @ApiResponse({ 
     status: 200, 
-    description: 'Your availability statistics retrieved successfully',
+    description: 'Blocked slot deleted successfully',
     schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Your availability statistics retrieved successfully' },
-        data: {
-          type: 'object',
-          properties: {
-            statistics: {
-              type: 'object',
-              properties: {
-                total_slots: { type: 'number', example: 160 },
-                booked_slots: { type: 'number', example: 45 },
-                available_slots: { type: 'number', example: 115 },
-                booking_rate: { type: 'number', example: 28.125 }
-              }
-            }
-          }
-        }
+        message: { type: 'string', example: 'Blocked slot deleted successfully' },
       }
     }
   })
-  async getCurrentProviderStats(
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Provider or blocked slot not found' 
+  })
+  async deleteBlockedSlot(
+    @Param('blocked_slot_id') blockedSlotId: string,
     @Req() req: Request,
-    @Query('start_date') startDate?: string,
-    @Query('end_date') endDate?: string,
   ) {
     const providerId = (req.user as any).id;
     
-    const stats = await this.availabilityService.getAvailabilityStats(
+    const result = await this.availabilityService.deleteBlockedSlot(
       providerId,
-      startDate,
-      endDate,
+      blockedSlotId,
     );
 
-    return {
-      success: true,
-      message: 'Your availability statistics retrieved successfully',
-      data: {
-        statistics: stats,
-      },
-    };
+    return result;
   }
 } 
